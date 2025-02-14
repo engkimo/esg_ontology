@@ -74,33 +74,38 @@ class Neo4jManager:
         source: str,
         target: str,
         relation_type: str,
-        properties: Optional[Dict] = None
+        properties: dict = None
     ) -> None:
         """
         関係を追加
         
         Args:
-            source: 関係の起点となるノード名
-            target: 関係の終点となるノード名
-            relation_type: 関係の種類
-            properties: 関係の属性
+            source: 開始ノード名
+            target: 終了ノード名
+            relation_type: 関係タイプ
+            properties: 関係のプロパティ
         """
-        query = """
-        MATCH (s {name: $source})
-        MATCH (t {name: $target})
-        MERGE (s)-[r:ESG_RELATION {type: $relation_type}]->(t)
-        """
-        
-        if properties:
-            query += " SET r += $properties"
+        if properties is None:
+            properties = {}
         
         with self.driver.session() as session:
+            # プロパティを文字列に変換
+            props_str = ", ".join(f"r.{k} = ${k}" for k in properties.keys())
+            if props_str:
+                props_str = f"SET {props_str}"
+            
+            query = f"""
+            MATCH (s:Node {{name: $source}})
+            MATCH (t:Node {{name: $target}})
+            MERGE (s)-[r:{relation_type}]->(t)
+            {props_str}
+            """
+            
             session.run(
                 query,
                 source=source,
                 target=target,
-                relation_type=relation_type,
-                properties=properties or {}
+                **properties
             )
     
     def import_ontology(self, ontology_path: Path) -> None:
@@ -219,4 +224,27 @@ class Neo4jManager:
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close() 
+        self.close()
+
+    def add_node(self, name: str, category: str) -> None:
+        """
+        ノードを追加
+        
+        Args:
+            name: ノード名
+            category: カテゴリ
+        """
+        with self.driver.session() as session:
+            session.run(
+                """
+                MERGE (n:Node {name: $name})
+                SET n.category = $category
+                """,
+                name=name,
+                category=category
+            )
+    
+    def clear_database(self) -> None:
+        """データベースの全データを削除"""
+        with self.driver.session() as session:
+            session.run("MATCH (n) DETACH DELETE n") 

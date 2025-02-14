@@ -45,15 +45,17 @@ def visualize_subgraph(subgraph: dict, title: str):
     plt.figure(figsize=(15, 10))
     plt.rcParams['font.family'] = 'Hiragino Sans'  # macOSの日本語フォント
     
-    # レイアウトの設定（kamada_kawai_layoutを使用）
-    pos = nx.kamada_kawai_layout(G)
+    # レイアウトの設定（階層的レイアウトを使用）
+    pos = nx.spring_layout(G, k=2, iterations=50)  # ノード間の距離を広げる
     
     # カテゴリ別の色とスタイル設定
     colors = {
-        "Environment": {"color": "#2ecc71", "alpha": 0.7},  # 緑
-        "Social": {"color": "#3498db", "alpha": 0.7},      # 青
-        "Governance": {"color": "#e74c3c", "alpha": 0.7},  # 赤
-        "Other": {"color": "#95a5a6", "alpha": 0.7}        # グレー
+        "Framework": {"color": "#1abc9c", "alpha": 0.7},  # ターコイズ
+        "Category": {"color": "#3498db", "alpha": 0.7},   # 青
+        "Metric": {"color": "#e74c3c", "alpha": 0.7},     # 赤
+        "Model": {"color": "#f1c40f", "alpha": 0.7},      # 黄
+        "Data": {"color": "#2ecc71", "alpha": 0.7},       # 緑
+        "Other": {"color": "#95a5a6", "alpha": 0.7}       # グレー
     }
     
     # カテゴリ別のノード描画
@@ -64,26 +66,37 @@ def visualize_subgraph(subgraph: dict, title: str):
                 G, pos,
                 nodelist=nodes,
                 node_color=style["color"],
-                node_size=2500,
+                node_size=3000,
                 alpha=style["alpha"],
                 edgecolors='white',
                 linewidths=2
             )
     
-    # エッジの描画（グラデーション効果付き）
-    edge_colors = []
-    for edge in G.edges():
-        edge_colors.append("#34495e")  # ダークグレー
+    # エッジの描画（関係タイプごとに色分け）
+    edge_colors = {
+        "DividedInto": "#2c3e50",      # 濃紺
+        "Subcategory": "#8e44ad",      # 紫
+        "ESG_Category": "#d35400",     # オレンジ
+        "ObtainedFrom": "#27ae60",     # 緑
+        "DependentVariable": "#c0392b", # 赤
+        "DataSource": "#16a085",       # ターコイズ
+        "Dataset": "#2980b9"           # 青
+    }
     
-    nx.draw_networkx_edges(
-        G, pos,
-        edge_color=edge_colors,
-        arrows=True,
-        arrowsize=20,
-        arrowstyle='->',
-        width=2,
-        alpha=0.6
-    )
+    # エッジをタイプごとに描画
+    for edge_type, color in edge_colors.items():
+        edges = [(u, v) for (u, v, d) in G.edges(data=True) if d.get("type") == edge_type]
+        if edges:
+            nx.draw_networkx_edges(
+                G, pos,
+                edgelist=edges,
+                edge_color=color,
+                arrows=True,
+                arrowsize=20,
+                arrowstyle='->',
+                width=2,
+                alpha=0.6
+            )
     
     # ノードラベルの描画
     nx.draw_networkx_labels(
@@ -106,20 +119,29 @@ def visualize_subgraph(subgraph: dict, title: str):
     # タイトルとレジェンドの設定
     plt.title(title, fontsize=15, pad=20, fontfamily='Hiragino Sans')
     
-    # カテゴリ別のレジェンド
-    legend_elements = [
+    # カテゴリとエッジタイプのレジェンド
+    node_legend_elements = [
         plt.Line2D([0], [0], marker='o', color='w',
                   markerfacecolor=style["color"],
                   markersize=10,
                   alpha=style["alpha"],
-                  label=category)
+                  label=f"Node: {category}")
         for category, style in colors.items()
+        if any(attr.get("category") == category for _, attr in G.nodes(data=True))
     ]
+    
+    edge_legend_elements = [
+        plt.Line2D([0], [0], color=color, alpha=0.6,
+                  label=f"Edge: {edge_type}")
+        for edge_type, color in edge_colors.items()
+        if any(d.get("type") == edge_type for _, _, d in G.edges(data=True))
+    ]
+    
     plt.legend(
-        handles=legend_elements,
-        loc='upper left',
-        bbox_to_anchor=(1, 1),
-        fontsize=10
+        handles=node_legend_elements + edge_legend_elements,
+        loc='center left',
+        bbox_to_anchor=(1, 0.5),
+        fontsize=8
     )
     
     plt.axis("off")
