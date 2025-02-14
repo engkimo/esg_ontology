@@ -54,6 +54,16 @@ def extract_concepts_and_relations(text_processor: ESGTextProcessor, texts: list
                 "company": company
             })
     
+    # デバッグ出力
+    print("\n抽出された概念とインスタンス:")
+    print("\n[概念]")
+    for concept in concepts["Concept"]:
+        print(f"- {concept}")
+    
+    print("\n[インスタンス]")
+    for instance, company in concepts["Instance"]:
+        print(f"- {instance} (企業: {company})")
+    
     return dict(concepts), relations
 
 def build_ontology(concepts: dict, relations: list) -> ESGOntology:
@@ -82,21 +92,28 @@ def build_ontology(concepts: dict, relations: list) -> ESGOntology:
     }
     
     # 基本概念の登録
+    ontology.add_concept("ESG", "ROOT", "is_a")
     for category, subconcepts in base_concepts.items():
         ontology.add_concept(category, "ESG", "is_a")
         for concept in subconcepts:
             ontology.add_concept(concept, category, "part_of")
     
+    # Organization概念の追加
+    ontology.add_concept("Organization", "ROOT", "is_a")
+    
     # 抽出された概念の追加
+    print("\nオントロジーへの追加:")
     for concept_type, items in concepts.items():
         if concept_type == "Concept":
             for concept in items:
                 # 最も関連の強いカテゴリを判定
                 category = ontology.classify_concept(concept)
                 if category:
+                    print(f"概念を追加: {concept} -> {category}")
                     ontology.add_concept(concept, category, "related_to")
         else:  # Instance
             for instance, company in items:
+                print(f"インスタンスを追加: {instance} (企業: {company})")
                 ontology.add_instance(
                     instance,
                     "Organization",

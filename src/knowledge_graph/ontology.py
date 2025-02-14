@@ -12,39 +12,39 @@ class ESGOntology:
     
     def __init__(self):
         """初期化"""
-        # 基本概念の階層構造を定義
-        self.concepts = {
-            "ESG": {
-                "Environment": {
-                    "気候変動": {"温室効果ガス", "カーボンニュートラル"},
-                    "資源効率": {"再生可能エネルギー", "廃棄物管理"},
-                    "生物多様性": {"生態系保護", "自然資本"}
-                },
-                "Social": {
-                    "人権": {"労働権", "児童労働防止"},
-                    "労働安全": {"労働環境", "健康管理"},
-                    "地域社会": {"コミュニティ貢献", "社会的包摂"}
-                },
-                "Governance": {
-                    "企業統治": {"取締役会", "株主権利"},
-                    "リスク管理": {"内部統制", "コンプライアンス"},
-                    "情報開示": {"透明性", "ESG情報開示"}
-                }
+        # グラフ構造の初期化
+        self.graph = nx.DiGraph()
+        
+        # 基本カテゴリの定義
+        self.categories = {
+            "Environment": {
+                "keywords": [
+                    "環境", "気候変動", "カーボン", "エネルギー", "廃棄物",
+                    "リサイクル", "生物多様性", "温室効果", "再生可能"
+                ]
+            },
+            "Social": {
+                "keywords": [
+                    "社会", "人権", "労働", "安全", "健康", "教育",
+                    "ダイバーシティ", "地域", "コミュニティ"
+                ]
+            },
+            "Governance": {
+                "keywords": [
+                    "ガバナンス", "取締役", "監査", "コンプライアンス",
+                    "リスク", "内部統制", "株主", "経営"
+                ]
             }
         }
         
-        # 関係性の定義
-        self.relations = {
-            "is_a": "上位概念-下位概念の関係",
-            "part_of": "全体-部分の関係",
-            "affects": "影響を与える関係",
-            "measured_by": "指標による測定関係",
-            "regulated_by": "規制・基準による管理関係"
-        }
+        # 基本カテゴリをグラフに追加
+        for category in self.categories:
+            self.graph.add_node(category, type="category")
         
-        # グラフ構造の初期化
-        self.graph = nx.DiGraph()
-        self._build_initial_graph()
+        # 概念とインスタンスの初期化
+        self.concepts = {}  # 概念の辞書
+        self.instances = {}  # インスタンスの辞書
+        self.relations = []  # 関係のリスト
     
     def _build_initial_graph(self) -> None:
         """基本概念からグラフ構造を構築"""
@@ -85,9 +85,15 @@ class ESGOntology:
             parent: 親概念
             relation: 関係の種類
         """
-        if relation not in self.relations:
-            raise ValueError(f"Unknown relation type: {relation}")
+        # 概念の追加
+        if concept not in self.concepts:
+            self.concepts[concept] = {
+                "category": parent,
+                "relations": []
+            }
         
+        # グラフに追加
+        self.graph.add_node(concept, type="concept", category=parent)
         self.graph.add_edge(concept, parent, relation=relation)
     
     def add_instance(
@@ -237,7 +243,7 @@ class ESGOntology:
         }
         
         # 各カテゴリのキーワードとのマッチングでスコアを計算
-        for category, data in self.concepts.items():
+        for category, data in self.categories.items():
             for keyword in data["keywords"]:
                 if keyword in concept:
                     scores[category] += 1
@@ -250,3 +256,36 @@ class ESGOntology:
                     return category
         
         return None 
+
+    def add_relation(
+        self,
+        source: str,
+        target: str,
+        relation_type: str,
+        properties: Optional[Dict] = None
+    ) -> None:
+        """
+        関係を追加
+        
+        Args:
+            source: 開始ノード
+            target: 終了ノード
+            relation_type: 関係タイプ
+            properties: 関係のプロパティ
+        """
+        # 関係の追加
+        relation = {
+            "source": source,
+            "target": target,
+            "type": relation_type,
+            "properties": properties or {}
+        }
+        self.relations.append(relation)
+        
+        # グラフに追加
+        self.graph.add_edge(
+            source,
+            target,
+            relation=relation_type,
+            **properties or {}
+        ) 

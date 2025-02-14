@@ -10,6 +10,7 @@ import spacy
 from tqdm import tqdm
 import json
 import re
+from typing import Optional
 
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent.parent
@@ -32,9 +33,13 @@ def clean_text(text: str) -> str:
     text = text.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
     return text.strip()
 
-def extract_esg_sections(df: pd.DataFrame) -> dict:
+def extract_esg_sections(df: pd.DataFrame, max_records: Optional[int] = None) -> dict:
     """
     ESG関連セクションの抽出
+    
+    Args:
+        df: 入力データフレーム
+        max_records: 処理する最大レコード数（Noneの場合は全件処理）
     
     Returns:
         dict: カテゴリごとのテキストデータ
@@ -65,6 +70,10 @@ def extract_esg_sections(df: pd.DataFrame) -> dict:
     
     # テキストカラムの処理
     text_columns = [col for col in df.columns if df[col].dtype == 'object']
+    
+    # レコード数の制限
+    if max_records is not None:
+        df = df.head(max_records)
     
     for _, row in tqdm(df.iterrows(), total=len(df), desc="テキスト処理中"):
         for col in text_columns:
@@ -108,9 +117,9 @@ def main():
         encoding="utf-8"
     )
     
-    # ESG関連セクションの抽出
+    # ESG関連セクションの抽出（10レコードに制限）
     print("\nESG関連セクションを抽出中...")
-    esg_sections = extract_esg_sections(df)
+    esg_sections = extract_esg_sections(df, max_records=10)
     
     # 結果の保存
     output_dir = project_root / "data/processed"
