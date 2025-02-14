@@ -115,10 +115,16 @@ class Neo4jManager:
         
         # ノードの作成
         for node in data["nodes"]:
-            if "attributes" in node:
-                self.add_concept(node["name"], node.get("category", "Other"), node["attributes"])
-            else:
-                self.add_concept(node["name"], node.get("category", "Other"))
+            # カテゴリの判定
+            category = "Other"
+            if node in data["concepts"].get("ESG", {}).get("Environment", {}):
+                category = "Environment"
+            elif node in data["concepts"].get("ESG", {}).get("Social", {}):
+                category = "Social"
+            elif node in data["concepts"].get("ESG", {}).get("Governance", {}):
+                category = "Governance"
+            
+            self.add_concept(node, category)
         
         # 関係の作成
         for edge in data["edges"]:
