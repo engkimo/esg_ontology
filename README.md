@@ -25,10 +25,22 @@
 - ✅ 概念とインスタンスの追加機能
 - ✅ JSON形式でのオントロジーの保存と読み込み
 
-### 3. 今後の実装予定
-- 🔲 Neo4jとの統合（`02_neo4j_integration.py`）
-- 🔲 知識グラフ補完機能（`03_knowledge_completion.py`）
-- 🔲 GraphRAGシステム（`04_graph_rag.py`）
+### 3. Neo4j統合モジュール (`src/knowledge_graph/neo4j_manager.py`)
+- ✅ Neo4jデータベースとの接続管理
+- ✅ インデックスの自動作成
+- ✅ オントロジーのインポート機能
+- ✅ 関係検索と概念検索機能
+
+### 4. 知識グラフ補完モジュール (`src/models/knowledge_completion.py`)
+- ✅ LLMを使用した関係推論
+- ✅ GNNによるリンク予測
+- ✅ MPSバックエンドのサポート
+- ✅ テストケースの実装
+
+### 5. 今後の実装予定
+- 🔲 GraphRAGシステム（`src/rag/graph_rag.py`）
+- 🔲 評価指標の実装
+- 🔲 ユーザーインターフェースの改善
 
 ## 必要条件
 
@@ -88,6 +100,21 @@ result = processor.process_text(text)
 ontology = ESGOntology()
 ontology.add_concept("排出量取引", "気候変動", relation="part_of")
 ontology.add_instance("Jクレジット制度", "排出量取引", {"country": "日本", "established": 2013})
+```
+
+### 知識グラフ補完の使用
+
+```python
+from src.models.knowledge_completion import ESGKnowledgeCompletion
+
+# 知識補完モデルの初期化
+model = ESGKnowledgeCompletion()
+
+# LLMによる関係推論
+relations = model.infer_relations_with_llm("気候変動")
+
+# GNNによるリンク予測
+predictions = model.predict_links(graph, "気候変動", top_k=5)
 ```
 
 ## プロジェクト構造
