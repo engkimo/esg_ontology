@@ -217,4 +217,34 @@ class ESGOntology:
                 relation=edge["relation"]
             )
         
-        return ontology 
+        return ontology
+
+    def classify_concept(self, concept: str) -> Optional[str]:
+        """
+        概念をESGカテゴリに分類
+        
+        Args:
+            concept: 概念名
+            
+        Returns:
+            カテゴリ名（"Environment"/"Social"/"Governance"）
+        """
+        # スコアの初期化
+        scores = {
+            "Environment": 0,
+            "Social": 0,
+            "Governance": 0
+        }
+        
+        # 各カテゴリのキーワードとのマッチングでスコアを計算
+        for category, data in self.concepts.items():
+            for keyword in data["keywords"]:
+                if keyword in concept:
+                    scores[category] += 1
+        
+        # 最高スコアのカテゴリを返す
+        max_score = max(scores.values())
+        if max_score > 0:
+            for category, score in scores.items():
+                if score == max_score:
+                    return category 
