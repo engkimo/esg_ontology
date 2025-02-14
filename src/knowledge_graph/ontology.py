@@ -51,12 +51,24 @@ class ESGOntology:
         def add_concepts(parent: str, concepts: Dict, relation: str = "is_a"):
             if isinstance(concepts, dict):
                 for concept, subconcepts in concepts.items():
+                    # 親ノードと子ノードを追加
+                    self.graph.add_node(parent)
+                    self.graph.add_node(concept)
+                    # 関係を追加
                     self.graph.add_edge(concept, parent, relation=relation)
+                    # 再帰的に下位概念を追加
                     add_concepts(concept, subconcepts)
             elif isinstance(concepts, set):
                 for concept in concepts:
+                    # 親ノードと子ノードを追加
+                    self.graph.add_node(parent)
+                    self.graph.add_node(concept)
+                    # 関係を追加
                     self.graph.add_edge(concept, parent, relation=relation)
         
+        # ルートノードを追加
+        self.graph.add_node("ROOT")
+        # 基本概念の構築
         add_concepts("ROOT", self.concepts)
     
     def add_concept(
@@ -112,10 +124,15 @@ class ESGOntology:
         if not self.graph.has_node(concept):
             return set()
         
-        return {
-            node for node in nx.descendants(self.graph, concept)
-            if self.graph[node][concept]["relation"] == "is_a"
-        }
+        subconcepts = set()
+        for node in self.graph.nodes():
+            # 指定された概念に向かうエッジを持つノードを探す
+            if self.graph.has_edge(node, concept):
+                edge_data = self.graph.get_edge_data(node, concept)
+                if edge_data.get("relation") == "is_a":
+                    subconcepts.add(node)
+        
+        return subconcepts
     
     def get_instances(self, concept: str) -> Set[str]:
         """
@@ -142,6 +159,14 @@ class ESGOntology:
         Args:
             file_path: 保存先のパス
         """
+        def convert_to_json_serializable(obj):
+            """オブジェクトをJSON変換可能な形式に変換"""
+            if isinstance(obj, set):
+                return list(obj)
+            elif isinstance(obj, dict):
+                return {k: convert_to_json_serializable(v) for k, v in obj.items()}
+            return obj
+
         data = {
             "nodes": list(self.graph.nodes()),
             "edges": [
@@ -152,9 +177,12 @@ class ESGOntology:
                 }
                 for u, v, d in self.graph.edges(data=True)
             ],
-            "concepts": self.concepts,
+            "concepts": convert_to_json_serializable(self.concepts),
             "relations": self.relations
         }
+        
+        # ディレクトリが存在しない場合は作成
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
