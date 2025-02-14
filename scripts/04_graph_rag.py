@@ -10,6 +10,17 @@ import os
 import matplotlib.pyplot as plt
 import networkx as nx
 import torch
+import warnings
+import matplotlib
+import json
+
+# 警告メッセージの抑制
+warnings.filterwarnings("ignore", category=UserWarning)
+
+# 日本語フォントの設定
+matplotlib.rcParams['font.family'] = 'Hiragino Sans'  # macOSの場合
+# matplotlib.rcParams['font.family'] = 'IPAGothic'    # Linuxの場合
+# matplotlib.rcParams['font.family'] = 'MS Gothic'    # Windowsの場合
 
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent.parent
@@ -65,7 +76,7 @@ def visualize_subgraph(subgraph: dict, title: str):
     plt.savefig(output_dir / f"{title.replace(' ', '_').lower()}.png")
     plt.close()
 
-def evaluate_response(question: str, answer: str, subgraph: dict) -> dict:
+def evaluate_response(question: str, answer: dict, subgraph: dict) -> dict:
     """回答の品質評価"""
     # 使用された概念数
     used_concepts = len(subgraph["nodes"])
@@ -78,29 +89,63 @@ def evaluate_response(question: str, answer: str, subgraph: dict) -> dict:
     relation_types = set(rel["type"] for rel in subgraph["relationships"])
     relation_diversity = len(relation_types)
     
-    # 回答の長さ（文字数）
-    answer_length = len(answer)
+    # 回答の充実度
+    initiatives_count = len(answer.get("key_initiatives", []))
+    challenges_count = len(answer.get("challenges", []))
+    metrics_count = len(answer.get("metrics", []))
+    references_count = len(answer.get("references", []))
     
     return {
         "概念数": used_concepts,
         "カテゴリカバレッジ": category_coverage,
         "関係性の多様性": relation_diversity,
-        "回答の長さ": answer_length,
+        "施策数": initiatives_count,
+        "課題数": challenges_count,
+        "指標数": metrics_count,
+        "参照概念数": references_count,
         "使用カテゴリ": list(categories),
         "使用関係タイプ": list(relation_types)
     }
+
+def print_structured_response(response: dict):
+    """構造化された回答を表示"""
+    print("\n【概要】")
+    print(response["overview"])
+    
+    print("\n【主要な施策】")
+    for i, initiative in enumerate(response["key_initiatives"], 1):
+        print(f"\n{i}. {initiative['title']}")
+        print(f"   説明: {initiative['description']}")
+        print(f"   実施方法: {initiative['implementation']}")
+    
+    print("\n【課題と注意点】")
+    for i, challenge in enumerate(response["challenges"], 1):
+        print(f"{i}. {challenge}")
+    
+    print("\n【評価指標と目標】")
+    for i, metric in enumerate(response["metrics"], 1):
+        print(f"\n{i}. {metric['name']}")
+        print(f"   目標: {metric['target']}")
+        print(f"   期間: {metric['timeline']}")
+    
+    print("\n【まとめ】")
+    print(f"要約: {response['conclusion']['summary']}")
+    print(f"展望: {response['conclusion']['future_outlook']}")
+    
+    print("\n【参照概念】")
+    for ref in response["references"]:
+        print(f"- {ref['concept']} ({ref['category']})")
+        print(f"  関連性: {ref['relevance']}")
 
 def main():
     # 環境変数の読み込み
     load_dotenv()
     
-    # Neo4j接続情報の確認
-    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
-    neo4j_password = os.getenv("NEO4J_PASSWORD")
-    
-    if not neo4j_password:
-        raise ValueError("NEO4J_PASSWORDが設定されていません。.envファイルを確認してください。")
+    # 必要な環境変数の確認
+    required_vars = ["NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD", "OPENAI_API_KEY"]
+    for var in required_vars:
+        if not os.getenv(var):
+            raise ValueError(f"{var}が設定されていません。.envファイルを確認してください。")
 
     # デバイスの確認
     device = get_device()
@@ -109,17 +154,17 @@ def main():
     # GraphRAGの初期化
     print("\nGraphRAGシステムを初期化中...")
     rag = ESGGraphRAG(
-        llm_model_name="rinna/japanese-gpt-neox-small",
+        openai_api_key=os.getenv("OPENAI_API_KEY"),
         embedding_model_name="sonoisa/sentence-bert-base-ja-mean-tokens",
         device=device,
-        neo4j_uri=neo4j_uri,
-        neo4j_user=neo4j_user,
-        neo4j_password=neo4j_password
+        neo4j_uri=os.getenv("NEO4J_URI"),
+        neo4j_user=os.getenv("NEO4J_USER"),
+        neo4j_password=os.getenv("NEO4J_PASSWORD")
     )
 
     # ノード埋め込みの更新
     print("\nノード埋め込みを更新中...")
-    rag.update_node_embeddings(batch_size=16)  # MacBookのメモリを考慮してバッチサイズを調整
+    rag.update_node_embeddings(batch_size=4)
 
     # ESGの各側面に関する具体的な質問
     questions = [
@@ -140,31 +185,23 @@ def main():
         # 関連するサブグラフの検索
         subgraph = rag.search_relevant_subgraph(
             query=question,
-            max_nodes=15,  # より広い文脈を取得
-            max_depth=3    # より深い関係性を探索
+            max_nodes=15,
+            max_depth=3
         )
         
         # 回答の生成
-        answer = rag.generate_response(
+        response = rag.generate_response(
             query=question,
             subgraph=subgraph,
-            temperature=0.3  # より確実な回答を生成
+            temperature=0.3
         )
         
-        print(f"\n回答:\n{answer}")
-        
-        # 参照された知識の表示
-        print("\n参照された主な概念:")
-        for node in subgraph["nodes"][:5]:  # 主要な5つの概念のみ表示
-            print(f"- {node['name']} ({node['category']})")
-        
-        print("\n主な関係性:")
-        for rel in subgraph["relationships"][:3]:  # 主要な3つの関係のみ表示
-            print(f"- {rel['source']} → {rel['type']} → {rel['target']}")
+        # 構造化された回答の表示
+        print_structured_response(response)
         
         # 回答の評価
-        evaluation = evaluate_response(question, answer, subgraph)
-        print("\n回答の評価結果:")
+        evaluation = evaluate_response(question, response, subgraph)
+        print("\n【回答の評価結果】")
         for metric, value in evaluation.items():
             print(f"- {metric}: {value}")
         
