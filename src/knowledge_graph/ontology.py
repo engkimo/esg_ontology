@@ -247,4 +247,6 @@ class ESGOntology:
         if max_score > 0:
             for category, score in scores.items():
                 if score == max_score:
-                    return category 
+                    return category
+        
+        return None 
