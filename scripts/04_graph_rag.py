@@ -41,39 +41,99 @@ def visualize_subgraph(subgraph: dict, title: str):
     for rel in subgraph["relationships"]:
         G.add_edge(rel["source"], rel["target"], type=rel["type"])
     
-    # 描画
+    # 描画設定
     plt.figure(figsize=(15, 10))
-    pos = nx.spring_layout(G, k=1, iterations=50)
+    plt.rcParams['font.family'] = 'Hiragino Sans'  # macOSの日本語フォント
     
-    # カテゴリ別の色分け
+    # レイアウトの設定（kamada_kawai_layoutを使用）
+    pos = nx.kamada_kawai_layout(G)
+    
+    # カテゴリ別の色とスタイル設定
     colors = {
-        "Environment": "#90EE90",  # 薄緑
-        "Social": "#ADD8E6",      # 薄青
-        "Governance": "#FFB6C1",  # 薄紅
-        "Other": "#D3D3D3"       # 薄灰
+        "Environment": {"color": "#2ecc71", "alpha": 0.7},  # 緑
+        "Social": {"color": "#3498db", "alpha": 0.7},      # 青
+        "Governance": {"color": "#e74c3c", "alpha": 0.7},  # 赤
+        "Other": {"color": "#95a5a6", "alpha": 0.7}        # グレー
     }
     
-    # ノードの描画
-    for category in colors:
+    # カテゴリ別のノード描画
+    for category, style in colors.items():
         nodes = [n for n, attr in G.nodes(data=True) if attr.get("category") == category]
-        nx.draw_networkx_nodes(G, pos, nodelist=nodes, node_color=colors[category],
-                             node_size=2000, alpha=0.7)
+        if nodes:
+            nx.draw_networkx_nodes(
+                G, pos,
+                nodelist=nodes,
+                node_color=style["color"],
+                node_size=2500,
+                alpha=style["alpha"],
+                edgecolors='white',
+                linewidths=2
+            )
     
-    # エッジとラベルの描画
-    nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=True, arrowsize=20)
-    nx.draw_networkx_labels(G, pos, font_size=10)
+    # エッジの描画（グラデーション効果付き）
+    edge_colors = []
+    for edge in G.edges():
+        edge_colors.append("#34495e")  # ダークグレー
     
+    nx.draw_networkx_edges(
+        G, pos,
+        edge_color=edge_colors,
+        arrows=True,
+        arrowsize=20,
+        arrowstyle='->',
+        width=2,
+        alpha=0.6
+    )
+    
+    # ノードラベルの描画
+    nx.draw_networkx_labels(
+        G, pos,
+        font_size=10,
+        font_family='Hiragino Sans',
+        font_weight='bold'
+    )
+    
+    # エッジラベルの描画
     edge_labels = nx.get_edge_attributes(G, "type")
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
+    nx.draw_networkx_edge_labels(
+        G, pos,
+        edge_labels=edge_labels,
+        font_size=8,
+        font_family='Hiragino Sans',
+        bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
+    )
     
-    plt.title(title, fontsize=15, pad=20)
+    # タイトルとレジェンドの設定
+    plt.title(title, fontsize=15, pad=20, fontfamily='Hiragino Sans')
+    
+    # カテゴリ別のレジェンド
+    legend_elements = [
+        plt.Line2D([0], [0], marker='o', color='w',
+                  markerfacecolor=style["color"],
+                  markersize=10,
+                  alpha=style["alpha"],
+                  label=category)
+        for category, style in colors.items()
+    ]
+    plt.legend(
+        handles=legend_elements,
+        loc='upper left',
+        bbox_to_anchor=(1, 1),
+        fontsize=10
+    )
+    
     plt.axis("off")
     plt.tight_layout()
     
     # 画像として保存
     output_dir = project_root / "data" / "visualizations"
     output_dir.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_dir / f"{title.replace(' ', '_').lower()}.png")
+    plt.savefig(
+        output_dir / f"{title.replace(' ', '_').lower()}.png",
+        dpi=300,
+        bbox_inches='tight',
+        facecolor='white'
+    )
     plt.close()
 
 def evaluate_response(question: str, answer: dict, subgraph: dict) -> dict:
