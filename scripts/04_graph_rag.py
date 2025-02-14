@@ -42,20 +42,23 @@ def visualize_subgraph(subgraph: dict, title: str):
         G.add_edge(rel["source"], rel["target"], type=rel["type"])
     
     # 描画設定
-    plt.figure(figsize=(15, 10))
+    plt.figure(figsize=(20, 15))
+    
+    # フォント設定
     plt.rcParams['font.family'] = 'Hiragino Sans'  # macOSの日本語フォント
     
     # レイアウトの設定（階層的レイアウトを使用）
-    pos = nx.spring_layout(G, k=2, iterations=50)  # ノード間の距離を広げる
+    pos = nx.spring_layout(G, k=3, iterations=50)  # ノード間の距離を広げる
     
     # カテゴリ別の色とスタイル設定
     colors = {
-        "Framework": {"color": "#1abc9c", "alpha": 0.7},  # ターコイズ
-        "Category": {"color": "#3498db", "alpha": 0.7},   # 青
-        "Metric": {"color": "#e74c3c", "alpha": 0.7},     # 赤
-        "Model": {"color": "#f1c40f", "alpha": 0.7},      # 黄
-        "Data": {"color": "#2ecc71", "alpha": 0.7},       # 緑
-        "Other": {"color": "#95a5a6", "alpha": 0.7}       # グレー
+        "Environmental": {"color": "#2ecc71", "alpha": 0.7},  # 緑
+        "Social": {"color": "#3498db", "alpha": 0.7},        # 青
+        "Governance": {"color": "#e74c3c", "alpha": 0.7},    # 赤
+        "Metric": {"color": "#f1c40f", "alpha": 0.7},        # 黄
+        "Framework": {"color": "#9b59b6", "alpha": 0.7},     # 紫
+        "Category": {"color": "#1abc9c", "alpha": 0.7},      # ターコイズ
+        "Other": {"color": "#95a5a6", "alpha": 0.7}          # グレー
     }
     
     # カテゴリ別のノード描画
@@ -66,7 +69,7 @@ def visualize_subgraph(subgraph: dict, title: str):
                 G, pos,
                 nodelist=nodes,
                 node_color=style["color"],
-                node_size=3000,
+                node_size=4000,
                 alpha=style["alpha"],
                 edgecolors='white',
                 linewidths=2
@@ -74,13 +77,15 @@ def visualize_subgraph(subgraph: dict, title: str):
     
     # エッジの描画（関係タイプごとに色分け）
     edge_colors = {
-        "DividedInto": "#2c3e50",      # 濃紺
-        "Subcategory": "#8e44ad",      # 紫
-        "ESG_Category": "#d35400",     # オレンジ
-        "ObtainedFrom": "#27ae60",     # 緑
-        "DependentVariable": "#c0392b", # 赤
-        "DataSource": "#16a085",       # ターコイズ
-        "Dataset": "#2980b9"           # 青
+        "Category_Of": "#2c3e50",      # 濃紺
+        "Subcategory_Of": "#8e44ad",   # 紫
+        "Metric_Of": "#d35400",        # オレンジ
+        "Impacts": "#27ae60",          # 緑
+        "Influences": "#c0392b",       # 赤
+        "Monitors": "#16a085",         # ターコイズ
+        "Oversees": "#2980b9",         # 青
+        "Enhances": "#f39c12",         # 黄
+        "Strengthens": "#7f8c8d"       # グレー
     }
     
     # エッジをタイプごとに描画
@@ -101,7 +106,7 @@ def visualize_subgraph(subgraph: dict, title: str):
     # ノードラベルの描画
     nx.draw_networkx_labels(
         G, pos,
-        font_size=10,
+        font_size=12,
         font_family='Hiragino Sans',
         font_weight='bold'
     )
@@ -111,19 +116,19 @@ def visualize_subgraph(subgraph: dict, title: str):
     nx.draw_networkx_edge_labels(
         G, pos,
         edge_labels=edge_labels,
-        font_size=8,
+        font_size=10,
         font_family='Hiragino Sans',
         bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
     )
     
     # タイトルとレジェンドの設定
-    plt.title(title, fontsize=15, pad=20, fontfamily='Hiragino Sans')
+    plt.title(title, fontsize=16, pad=20, fontfamily='Hiragino Sans')
     
     # カテゴリとエッジタイプのレジェンド
     node_legend_elements = [
         plt.Line2D([0], [0], marker='o', color='w',
                   markerfacecolor=style["color"],
-                  markersize=10,
+                  markersize=15,
                   alpha=style["alpha"],
                   label=f"Node: {category}")
         for category, style in colors.items()
@@ -141,7 +146,7 @@ def visualize_subgraph(subgraph: dict, title: str):
         handles=node_legend_elements + edge_legend_elements,
         loc='center left',
         bbox_to_anchor=(1, 0.5),
-        fontsize=8
+        fontsize=10
     )
     
     plt.axis("off")
