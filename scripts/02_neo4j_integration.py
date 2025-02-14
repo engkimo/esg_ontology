@@ -19,6 +19,12 @@ def main():
     # 環境変数の読み込み
     load_dotenv()
     
+    # デバッグ出力
+    print("Current working directory:", os.getcwd())
+    print("Project root:", project_root)
+    print(".env file exists:", Path(".env").exists())
+    print("NEO4J_PASSWORD:", os.getenv("NEO4J_PASSWORD"))
+    
     # Neo4j接続情報の確認
     neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
     neo4j_user = os.getenv("NEO4J_USER", "neo4j")
