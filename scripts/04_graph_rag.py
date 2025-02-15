@@ -10,17 +10,6 @@ import os
 import matplotlib.pyplot as plt
 import networkx as nx
 import torch
-import warnings
-import matplotlib
-import json
-
-# 警告メッセージの抑制
-warnings.filterwarnings("ignore", category=UserWarning)
-
-# 日本語フォントの設定
-matplotlib.rcParams['font.family'] = 'Hiragino Sans'  # macOSの場合
-# matplotlib.rcParams['font.family'] = 'IPAGothic'    # Linuxの場合
-# matplotlib.rcParams['font.family'] = 'MS Gothic'    # Windowsの場合
 
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent.parent
@@ -41,129 +30,42 @@ def visualize_subgraph(subgraph: dict, title: str):
     for rel in subgraph["relationships"]:
         G.add_edge(rel["source"], rel["target"], type=rel["type"])
     
-    # 描画設定
-    plt.figure(figsize=(20, 15))
+    # 描画
+    plt.figure(figsize=(15, 10))
+    pos = nx.spring_layout(G, k=1, iterations=50)
     
-    # フォント設定
-    plt.rcParams['font.family'] = 'Hiragino Sans'  # macOSの日本語フォント
-    
-    # レイアウトの設定（階層的レイアウトを使用）
-    pos = nx.spring_layout(G, k=3, iterations=50)  # ノード間の距離を広げる
-    
-    # カテゴリ別の色とスタイル設定
+    # カテゴリ別の色分け
     colors = {
-        "Environmental": {"color": "#2ecc71", "alpha": 0.7},  # 緑
-        "Social": {"color": "#3498db", "alpha": 0.7},        # 青
-        "Governance": {"color": "#e74c3c", "alpha": 0.7},    # 赤
-        "Metric": {"color": "#f1c40f", "alpha": 0.7},        # 黄
-        "Framework": {"color": "#9b59b6", "alpha": 0.7},     # 紫
-        "Category": {"color": "#1abc9c", "alpha": 0.7},      # ターコイズ
-        "Other": {"color": "#95a5a6", "alpha": 0.7}          # グレー
+        "Environment": "#90EE90",  # 薄緑
+        "Social": "#ADD8E6",      # 薄青
+        "Governance": "#FFB6C1",  # 薄紅
+        "Other": "#D3D3D3"       # 薄灰
     }
     
-    # カテゴリ別のノード描画
-    for category, style in colors.items():
+    # ノードの描画
+    for category in colors:
         nodes = [n for n, attr in G.nodes(data=True) if attr.get("category") == category]
-        if nodes:
-            nx.draw_networkx_nodes(
-                G, pos,
-                nodelist=nodes,
-                node_color=style["color"],
-                node_size=4000,
-                alpha=style["alpha"],
-                edgecolors='white',
-                linewidths=2
-            )
+        nx.draw_networkx_nodes(G, pos, nodelist=nodes, node_color=colors[category],
+                             node_size=2000, alpha=0.7)
     
-    # エッジの描画（関係タイプごとに色分け）
-    edge_colors = {
-        "Category_Of": "#2c3e50",      # 濃紺
-        "Subcategory_Of": "#8e44ad",   # 紫
-        "Metric_Of": "#d35400",        # オレンジ
-        "Impacts": "#27ae60",          # 緑
-        "Influences": "#c0392b",       # 赤
-        "Monitors": "#16a085",         # ターコイズ
-        "Oversees": "#2980b9",         # 青
-        "Enhances": "#f39c12",         # 黄
-        "Strengthens": "#7f8c8d"       # グレー
-    }
+    # エッジとラベルの描画
+    nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=True, arrowsize=20)
+    nx.draw_networkx_labels(G, pos, font_size=10)
     
-    # エッジをタイプごとに描画
-    for edge_type, color in edge_colors.items():
-        edges = [(u, v) for (u, v, d) in G.edges(data=True) if d.get("type") == edge_type]
-        if edges:
-            nx.draw_networkx_edges(
-                G, pos,
-                edgelist=edges,
-                edge_color=color,
-                arrows=True,
-                arrowsize=20,
-                arrowstyle='->',
-                width=2,
-                alpha=0.6
-            )
-    
-    # ノードラベルの描画
-    nx.draw_networkx_labels(
-        G, pos,
-        font_size=12,
-        font_family='Hiragino Sans',
-        font_weight='bold'
-    )
-    
-    # エッジラベルの描画
     edge_labels = nx.get_edge_attributes(G, "type")
-    nx.draw_networkx_edge_labels(
-        G, pos,
-        edge_labels=edge_labels,
-        font_size=10,
-        font_family='Hiragino Sans',
-        bbox=dict(facecolor='white', edgecolor='none', alpha=0.7)
-    )
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
     
-    # タイトルとレジェンドの設定
-    plt.title(title, fontsize=16, pad=20, fontfamily='Hiragino Sans')
-    
-    # カテゴリとエッジタイプのレジェンド
-    node_legend_elements = [
-        plt.Line2D([0], [0], marker='o', color='w',
-                  markerfacecolor=style["color"],
-                  markersize=15,
-                  alpha=style["alpha"],
-                  label=f"Node: {category}")
-        for category, style in colors.items()
-        if any(attr.get("category") == category for _, attr in G.nodes(data=True))
-    ]
-    
-    edge_legend_elements = [
-        plt.Line2D([0], [0], color=color, alpha=0.6,
-                  label=f"Edge: {edge_type}")
-        for edge_type, color in edge_colors.items()
-        if any(d.get("type") == edge_type for _, _, d in G.edges(data=True))
-    ]
-    
-    plt.legend(
-        handles=node_legend_elements + edge_legend_elements,
-        loc='center left',
-        bbox_to_anchor=(1, 0.5),
-        fontsize=10
-    )
-    
+    plt.title(title, fontsize=15, pad=20)
     plt.axis("off")
     plt.tight_layout()
     
     # 画像として保存
     output_dir = project_root / "data" / "visualizations"
     output_dir.mkdir(parents=True, exist_ok=True)
-    plt.savefig(
-        output_dir / f"{title.replace(' ', '_').lower()}.png",
-        dpi=300,
-        bbox_inches='tight',
-        facecolor='white'
-    )
+    plt.savefig(output_dir / f"{title.replace(' ', '_').lower()}.png")
     plt.close()
 
-def evaluate_response(question: str, answer: dict, subgraph: dict) -> dict:
+def evaluate_response(question: str, answer: str, subgraph: dict) -> dict:
     """回答の品質評価"""
     # 使用された概念数
     used_concepts = len(subgraph["nodes"])
@@ -176,63 +78,29 @@ def evaluate_response(question: str, answer: dict, subgraph: dict) -> dict:
     relation_types = set(rel["type"] for rel in subgraph["relationships"])
     relation_diversity = len(relation_types)
     
-    # 回答の充実度
-    initiatives_count = len(answer.get("key_initiatives", []))
-    challenges_count = len(answer.get("challenges", []))
-    metrics_count = len(answer.get("metrics", []))
-    references_count = len(answer.get("references", []))
+    # 回答の長さ（文字数）
+    answer_length = len(answer)
     
     return {
         "概念数": used_concepts,
         "カテゴリカバレッジ": category_coverage,
         "関係性の多様性": relation_diversity,
-        "施策数": initiatives_count,
-        "課題数": challenges_count,
-        "指標数": metrics_count,
-        "参照概念数": references_count,
+        "回答の長さ": answer_length,
         "使用カテゴリ": list(categories),
         "使用関係タイプ": list(relation_types)
     }
-
-def print_structured_response(response: dict):
-    """構造化された回答を表示"""
-    print("\n【概要】")
-    print(response["overview"])
-    
-    print("\n【主要な施策】")
-    for i, initiative in enumerate(response["key_initiatives"], 1):
-        print(f"\n{i}. {initiative['title']}")
-        print(f"   説明: {initiative['description']}")
-        print(f"   実施方法: {initiative['implementation']}")
-    
-    print("\n【課題と注意点】")
-    for i, challenge in enumerate(response["challenges"], 1):
-        print(f"{i}. {challenge}")
-    
-    print("\n【評価指標と目標】")
-    for i, metric in enumerate(response["metrics"], 1):
-        print(f"\n{i}. {metric['name']}")
-        print(f"   目標: {metric['target']}")
-        print(f"   期間: {metric['timeline']}")
-    
-    print("\n【まとめ】")
-    print(f"要約: {response['conclusion']['summary']}")
-    print(f"展望: {response['conclusion']['future_outlook']}")
-    
-    print("\n【参照概念】")
-    for ref in response["references"]:
-        print(f"- {ref['concept']} ({ref['category']})")
-        print(f"  関連性: {ref['relevance']}")
 
 def main():
     # 環境変数の読み込み
     load_dotenv()
     
-    # 必要な環境変数の確認
-    required_vars = ["NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD", "OPENAI_API_KEY"]
-    for var in required_vars:
-        if not os.getenv(var):
-            raise ValueError(f"{var}が設定されていません。.envファイルを確認してください。")
+    # Neo4j接続情報の確認
+    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password = os.getenv("NEO4J_PASSWORD")
+    
+    if not neo4j_password:
+        raise ValueError("NEO4J_PASSWORDが設定されていません。.envファイルを確認してください。")
 
     # デバイスの確認
     device = get_device()
@@ -241,17 +109,17 @@ def main():
     # GraphRAGの初期化
     print("\nGraphRAGシステムを初期化中...")
     rag = ESGGraphRAG(
-        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        llm_model_name="rinna/japanese-gpt-neox-small",
         embedding_model_name="sonoisa/sentence-bert-base-ja-mean-tokens",
         device=device,
-        neo4j_uri=os.getenv("NEO4J_URI"),
-        neo4j_user=os.getenv("NEO4J_USER"),
-        neo4j_password=os.getenv("NEO4J_PASSWORD")
+        neo4j_uri=neo4j_uri,
+        neo4j_user=neo4j_user,
+        neo4j_password=neo4j_password
     )
 
     # ノード埋め込みの更新
     print("\nノード埋め込みを更新中...")
-    rag.update_node_embeddings(batch_size=4)
+    rag.update_node_embeddings(batch_size=16)  # MacBookのメモリを考慮してバッチサイズを調整
 
     # ESGの各側面に関する具体的な質問
     questions = [
@@ -272,23 +140,31 @@ def main():
         # 関連するサブグラフの検索
         subgraph = rag.search_relevant_subgraph(
             query=question,
-            max_nodes=15,
-            max_depth=3
+            max_nodes=15,  # より広い文脈を取得
+            max_depth=3    # より深い関係性を探索
         )
         
         # 回答の生成
-        response = rag.generate_response(
+        answer = rag.generate_response(
             query=question,
             subgraph=subgraph,
-            temperature=0.3
+            temperature=0.3  # より確実な回答を生成
         )
         
-        # 構造化された回答の表示
-        print_structured_response(response)
+        print(f"\n回答:\n{answer}")
+        
+        # 参照された知識の表示
+        print("\n参照された主な概念:")
+        for node in subgraph["nodes"][:5]:  # 主要な5つの概念のみ表示
+            print(f"- {node['name']} ({node['category']})")
+        
+        print("\n主な関係性:")
+        for rel in subgraph["relationships"][:3]:  # 主要な3つの関係のみ表示
+            print(f"- {rel['source']} → {rel['type']} → {rel['target']}")
         
         # 回答の評価
-        evaluation = evaluate_response(question, response, subgraph)
-        print("\n【回答の評価結果】")
+        evaluation = evaluate_response(question, answer, subgraph)
+        print("\n回答の評価結果:")
         for metric, value in evaluation.items():
             print(f"- {metric}: {value}")
         

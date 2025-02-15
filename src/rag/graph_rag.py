@@ -1,236 +1,230 @@
-#!/usr/bin/env python3
 """
-ESG GraphRAGシステム
+グラフ構造を活用したRAGシステム
 """
 
-from typing import Dict, List, Optional
-from openai import OpenAI
-import torch
-from sentence_transformers import SentenceTransformer
-from neo4j import GraphDatabase
-import json
+from typing import List, Dict, Optional, Union, Tuple, Set
+from pathlib import Path
+import numpy as np
+import re
+from collections import Counter
+from ..knowledge_graph.neo4j_manager import Neo4jManager
 
 class ESGGraphRAG:
-    """ESG GraphRAGシステム"""
+    """ESGドメインのGraphRAGシステム"""
     
     def __init__(
         self,
-        openai_api_key: str,
-        embedding_model_name: str,
-        device: torch.device,
-        neo4j_uri: str,
-        neo4j_user: str,
-        neo4j_password: str
+        neo4j_uri: Optional[str] = None,
+        neo4j_user: Optional[str] = None,
+        neo4j_password: Optional[str] = None
     ):
         """
         初期化
         
         Args:
-            openai_api_key: OpenAI APIキー
-            embedding_model_name: 文埋め込みモデル名
-            device: 計算デバイス
             neo4j_uri: Neo4jのURI
             neo4j_user: Neo4jのユーザー名
             neo4j_password: Neo4jのパスワード
         """
-        self.openai_client = OpenAI(api_key=openai_api_key)
-        self.embedding_model = SentenceTransformer(embedding_model_name).to(device)
-        self.device = device
-        self.driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
-        
-        # ノード埋め込みのキャッシュ
-        self.node_embeddings = {}
-    
-    def update_node_embeddings(self, batch_size: int = 32):
-        """
-        全ノードの埋め込みを更新
-        
-        Args:
-            batch_size: バッチサイズ
-        """
-        with self.driver.session() as session:
-            # 全ノードの取得
-            result = session.run("MATCH (n) RETURN n.name AS name")
-            nodes = [record["name"] for record in result]
-            
-            # バッチ処理
-            for i in range(0, len(nodes), batch_size):
-                batch = nodes[i:i + batch_size]
-                embeddings = self.embedding_model.encode(
-                    batch,
-                    convert_to_tensor=True,
-                    device=self.device
-                )
-                
-                # キャッシュの更新
-                for node, embedding in zip(batch, embeddings):
-                    self.node_embeddings[node] = embedding
+        # Neo4jマネージャーの初期化
+        self.neo4j = Neo4jManager(
+            uri=neo4j_uri,
+            user=neo4j_user,
+            password=neo4j_password
+        )
     
     def search_relevant_subgraph(
         self,
         query: str,
         max_nodes: int = 10,
-        max_depth: int = 2
+        max_depth: int = 2,
+        similarity_threshold: float = 0.5,
+        category_weights: Optional[Dict[str, float]] = None
     ) -> Dict:
         """
         クエリに関連するサブグラフを検索
         
         Args:
             query: 検索クエリ
-            max_nodes: 最大ノード数
-            max_depth: 最大探索深度
+            max_nodes: 取得する最大ノード数
+            max_depth: 探索する最大の深さ
+            similarity_threshold: 類似度の閾値
+            category_weights: カテゴリごとの重み付け
             
         Returns:
-            サブグラフ（ノードと関係のリスト）
+            関連するサブグラフ情報
         """
-        # クエリの埋め込み
-        query_embedding = self.embedding_model.encode(
-            query,
-            convert_to_tensor=True,
-            device=self.device
-        )
-        
-        # 類似度の計算
-        similarities = {}
-        for node, embedding in self.node_embeddings.items():
-            similarity = torch.cosine_similarity(query_embedding, embedding, dim=0)
-            similarities[node] = similarity.item()
-        
-        # 類似度の高いノードを選択
-        seed_nodes = sorted(
-            similarities.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:max_nodes // 2]
-        seed_nodes = [node for node, _ in seed_nodes]
-        
-        # サブグラフの取得
-        with self.driver.session() as session:
-            # シードノードを起点に探索
-            cypher_query = f"""
-            MATCH path = (n)-[*0..{max_depth}]-(m)
-            WHERE n.name IN $seeds
-            WITH DISTINCT nodes(path) AS nodes, relationships(path) AS rels
-            UNWIND nodes AS node
-            WITH COLLECT(DISTINCT {{
-                name: node.name,
-                category: node.category
-            }}) AS nodes,
-            rels
-            UNWIND rels AS rel
-            WITH nodes, COLLECT(DISTINCT {{
-                source: startNode(rel).name,
-                target: endNode(rel).name,
-                type: type(rel)
-            }}) AS relationships
-            RETURN nodes, relationships
-            """
-            
-            result = session.run(
-                cypher_query,
-                seeds=seed_nodes
-            )
-            
-            record = result.single()
-            if record is None:
-                return {"nodes": [], "relationships": []}
-            
-            return {
-                "nodes": record["nodes"][:max_nodes],
-                "relationships": record["relationships"]
+        # デフォルトのカテゴリ重み
+        if category_weights is None:
+            category_weights = {
+                "Environment": 1.0,
+                "Social": 1.0,
+                "Governance": 1.0
             }
+        
+        # クエリの単語を抽出
+        query_words = set(self._tokenize(query))
+        
+        # Neo4jでの検索クエリ
+        cypher_query = """
+        // ステップ1: クエリに関連するノードの検索
+        MATCH (n:Concept)
+        WHERE any(word IN $query_words WHERE n.name CONTAINS word)
+        WITH n, n.category AS category
+        
+        // ステップ2: カテゴリによる重み付け
+        WITH n, CASE category
+            WHEN 'Environment' THEN $env_weight
+            WHEN 'Social' THEN $social_weight
+            WHEN 'Governance' THEN $gov_weight
+            ELSE 1.0
+        END AS weight
+        ORDER BY weight DESC
+        LIMIT $max_initial_nodes
+        
+        // ステップ3: 関連するパスの探索
+        MATCH path = (n)-[r:ESG_RELATION*1..%d]->(m)
+        WHERE ALL(rel IN r WHERE rel.confidence IS NULL OR rel.confidence >= 0.5)
+        WITH COLLECT(path) AS paths
+        
+        // ステップ4: パスの展開とユニークなノードと関係の抽出
+        UNWIND paths AS p
+        WITH DISTINCT nodes(p) AS nodes, relationships(p) AS rels
+        
+        // ステップ5: 結果の整形
+        RETURN 
+            [n IN nodes | {
+                id: id(n),
+                name: n.name,
+                category: n.category,
+                properties: properties(n)
+            }] AS nodes,
+            [r IN rels | {
+                source: startNode(r).name,
+                type: r.type,
+                target: endNode(r).name,
+                properties: properties(r)
+            }] AS relationships
+        LIMIT %d
+        """ % (max_depth, max_nodes)
+        
+        # パラメータの準備
+        params = {
+            "query_words": list(query_words),
+            "max_initial_nodes": max_nodes,
+            "env_weight": category_weights.get("Environment", 1.0),
+            "social_weight": category_weights.get("Social", 1.0),
+            "gov_weight": category_weights.get("Governance", 1.0)
+        }
+        
+        # クエリの実行
+        with self.neo4j.driver.session() as session:
+            result = session.run(cypher_query, params)
+            subgraph = result.single()
+            
+            if not subgraph:
+                return {"nodes": [], "relationships": []}
+        
+        # 結果の後処理
+        processed_result = self._process_subgraph_result(subgraph)
+        
+        return processed_result
+    
+    def _process_subgraph_result(self, subgraph: Dict) -> Dict:
+        """サブグラフの結果を後処理"""
+        # ノードの重複除去とソート
+        unique_nodes = {}
+        for node in subgraph["nodes"]:
+            if node["name"] not in unique_nodes:
+                unique_nodes[node["name"]] = node
+        
+        # 関係の重複除去とソート
+        unique_relations = {}
+        for rel in subgraph["relationships"]:
+            key = f"{rel['source']}-{rel['type']}-{rel['target']}"
+            if key not in unique_relations:
+                unique_relations[key] = rel
+        
+        # カテゴリごとのノード数を計算
+        category_counts = {}
+        for node in unique_nodes.values():
+            category = node.get("category", "Other")
+            category_counts[category] = category_counts.get(category, 0) + 1
+        
+        return {
+            "nodes": list(unique_nodes.values()),
+            "relationships": list(unique_relations.values()),
+            "statistics": {
+                "total_nodes": len(unique_nodes),
+                "total_relationships": len(unique_relations),
+                "category_distribution": category_counts
+            }
+        }
     
     def generate_response(
         self,
         query: str,
         subgraph: Dict,
-        temperature: float = 0.7
-    ) -> Dict:
+        max_length: int = 512
+    ) -> str:
         """
-        クエリに対する回答を生成
+        サブグラフを考慮して回答を生成
         
         Args:
-            query: 質問
-            subgraph: 関連するサブグラフ
-            temperature: 生成の温度
+            query: ユーザーのクエリ
+            subgraph: 関連するサブグラフ情報
+            max_length: 生成する最大文字数
             
         Returns:
-            構造化された回答
+            生成された回答
         """
         # コンテキストの構築
-        context = "以下のESGに関する知識グラフの情報を参考に回答してください：\n\n"
+        context = self._build_context_from_subgraph(subgraph)
         
-        # ノードの情報
-        context += "【概念】\n"
+        # 簡易的な回答生成（実際のシステムではLLMを使用）
+        response = f"クエリ「{query}」に関連する情報:\n\n"
+        
+        # カテゴリごとの情報を追加
+        for category, concepts in context.items():
+            response += f"\n{category}に関する情報:\n"
+            for concept, relations in concepts.items():
+                response += f"- {concept}: {', '.join(relations)}\n"
+        
+        # 最大長に制限
+        return response[:max_length]
+    
+    def _build_context_from_subgraph(self, subgraph: Dict) -> Dict[str, Dict[str, List[str]]]:
+        """サブグラフから文脈情報を構築"""
+        context = {}
+        
+        # ノードをカテゴリごとに整理
         for node in subgraph["nodes"]:
-            context += f"- {node['name']} (カテゴリ: {node['category']})\n"
+            category = node.get("category", "Other")
+            if category not in context:
+                context[category] = {}
+            context[category][node["name"]] = []
         
-        # 関係の情報
-        context += "\n【関係性】\n"
+        # 関係の情報を追加
         for rel in subgraph["relationships"]:
-            context += f"- {rel['source']} → {rel['type']} → {rel['target']}\n"
+            source_category = None
+            for node in subgraph["nodes"]:
+                if node["name"] == rel["source"]:
+                    source_category = node.get("category", "Other")
+                    break
+            
+            if source_category and rel["source"] in context[source_category]:
+                context[source_category][rel["source"]].append(
+                    f"{rel['type']} -> {rel['target']}"
+                )
         
-        # プロンプトの構築
-        prompt = f"""
-{context}
-
-質問: {query}
-
-以下の形式で回答を構造化してJSON形式で出力してください：
-
-{{
-    "overview": "概要説明",
-    "key_initiatives": [
-        {{
-            "title": "施策のタイトル",
-            "description": "施策の説明",
-            "implementation": "実施方法"
-        }}
-    ],
-    "challenges": [
-        "課題1",
-        "課題2"
-    ],
-    "metrics": [
-        {{
-            "name": "指標名",
-            "target": "目標値",
-            "timeline": "達成期間"
-        }}
-    ],
-    "conclusion": {{
-        "summary": "まとめ",
-        "future_outlook": "今後の展望"
-    }},
-    "references": [
-        {{
-            "concept": "参照した概念名",
-            "category": "概念のカテゴリ",
-            "relevance": "関連性の説明"
-        }}
-    ]
-}}
-
-注意：
-- 回答は必ず上記のJSON形式で出力してください
-- 各セクションは与えられた知識グラフの情報に基づいて具体的に記述してください
-- 施策は3-5個程度、課題は2-3個程度、指標は2-3個程度を目安に出力してください
-"""
-
-        # OpenAI APIを使用して回答を生成
-        response = self.openai_client.chat.completions.create(
-            model="gpt-4-turbo-preview",
-            messages=[
-                {"role": "system", "content": "あなたはESGの専門家です。"},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=temperature,
-            response_format={"type": "json_object"}
-        )
-        
-        # JSON形式の回答をパース
-        return json.loads(response.choices[0].message.content)
+        return context
+    
+    def _tokenize(self, text: str) -> List[str]:
+        """テキストの分かち書き（簡易版）"""
+        # 記号を除去し、空白で分割
+        text = re.sub(r'[、。！？「」『』（）［］\s]', ' ', text)
+        return [word for word in text.split() if word]
     
     def close(self):
         """リソースの解放"""
-        self.driver.close() 
+        self.neo4j.close() 

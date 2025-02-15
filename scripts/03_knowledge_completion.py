@@ -8,7 +8,6 @@ from pathlib import Path
 import torch
 from dotenv import load_dotenv
 import os
-import networkx as nx
 
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent.parent
@@ -49,34 +48,32 @@ def main():
         password=neo4j_password
     )
 
-    # サンプルグラフの作成
+    # エッジ情報の準備（サンプル）
     print("\nサンプルデータでGNNを学習中...")
-    G = nx.DiGraph()
-    G.add_nodes_from(['気候変動', '温室効果ガス', '再生可能エネルギー', 'カーボンニュートラル'])
-    G.add_edges_from([
-        ('温室効果ガス', '気候変動'),
-        ('再生可能エネルギー', 'カーボンニュートラル'),
-        ('気候変動', 'カーボンニュートラル')
-    ])
+    edge_index = torch.tensor([
+        [0, 1, 1, 2],  # source nodes
+        [1, 2, 3, 3]   # target nodes
+    ], device=device)
+    num_nodes = 4
 
     # GNNの学習
-    completion_model.train(
-        graph=G,
-        num_epochs=100,
+    completion_model.train_gnn(
+        edge_index=edge_index,
+        num_nodes=num_nodes,
+        epochs=100,
         batch_size=32
     )
 
     # リンク予測
     print("\nリンク予測を実行中...")
-    predictions = completion_model.predict_links(
-        graph=G,
-        source_node='気候変動',
-        top_k=5
+    prob, pairs = completion_model.predict_links_with_gnn(
+        edge_index=edge_index,
+        num_nodes=num_nodes
     )
 
     print("\n予測された新しいリンク（上位5件）:")
-    for target, score in predictions:
-        print(f"{target}: {score:.4f}")
+    for i in range(min(5, len(prob))):
+        print(f"Node {pairs[0,i]} -> Node {pairs[1,i]}: {prob[i]:.4f}")
 
     # LLMによる関係推論
     print("\nLLMによる関係推論を実行中...")
