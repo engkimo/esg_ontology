@@ -10,6 +10,7 @@ import os
 import matplotlib.pyplot as plt
 import networkx as nx
 import torch
+from datetime import datetime
 
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent.parent
@@ -72,10 +73,14 @@ def visualize_subgraph(subgraph: dict, title: str):
     plt.axis("off")
     plt.tight_layout()
     
+    # タイムスタンプの生成
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
     # 画像として保存
     output_dir = project_root / "data" / "visualizations"
     output_dir.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_dir / f"{title.replace(' ', '_').lower()}.png",
+    output_filename = f"{title.replace(' ', '_').lower()}_{timestamp}.png"
+    plt.savefig(output_dir / output_filename,
                 bbox_inches='tight', dpi=300)
     plt.close()
 
@@ -139,13 +144,13 @@ def main():
     # ESGの各側面に関する具体的な質問
     questions = [
         # 環境（Environment）に関する質問
-        "企業がScope 3排出量を削減するために取るべき具体的な施策を教えてください。",
+        "めぶきフィナンシャルグループの気候変動対策と温室効果ガス削減目標について教えてください。",
         
         # 社会（Social）に関する質問
-        "サプライチェーン全体での人権デューデリジェンスをどのように実施すべきですか？",
+        "めぶきフィナンシャルグループの地域社会への貢献と金融包摂への取り組みを説明してください。",
         
         # ガバナンス（Governance）に関する質問
-        "取締役会の実効性を高めるために重要な要素は何ですか？"
+        "めぶきフィナンシャルグループのコーポレートガバナンス体制と取締役会の多様性について教えてください。"
     ]
 
     for i, question in enumerate(questions, 1):
@@ -186,7 +191,10 @@ def main():
         visualize_subgraph(subgraph, f"Question {i} Knowledge Graph")
 
     # 特定のトピックの詳細分析
-    topics = ["気候変動対策", "サプライチェーンマネジメント"]
+    topics = [
+        "めぶきフィナンシャルグループのサステナブルファイナンス戦略",
+        "めぶきフィナンシャルグループの人材育成とダイバーシティ"
+    ]
     
     for topic in topics:
         print(f"\n{topic}の詳細分析:")
