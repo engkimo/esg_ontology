@@ -329,7 +329,6 @@ name = "esg-ontology"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "huggingface-hub" },
     { name = "matplotlib" },
     { name = "neo4j" },
     { name = "networkx" },
@@ -346,7 +345,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "huggingface-hub", specifier = "==0.20.3" },
     { name = "matplotlib", specifier = "==3.8.0" },
     { name = "neo4j", specifier = "==5.14.0" },
     { name = "networkx", specifier = "==3.2.0" },
@@ -354,7 +352,7 @@ requires-dist = [
     { name = "pandas", specifier = "==2.1.0" },
     { name = "python-dotenv", specifier = "==1.0.0" },
     { name = "scikit-learn", specifier = "==1.3.0" },
-    { name = "sentence-transformers", specifier = "==2.3.1" },
+    { name = "sentence-transformers", specifier = "==2.2.0" },
     { name = "spacy", specifier = "==3.7.2" },
     { name = "torch", specifier = "==2.1.0" },
     { name = "tqdm", specifier = "==4.66.0" },
@@ -1546,25 +1544,22 @@ wheels = [
 
 [[package]]
 name = "sentence-transformers"
-version = "2.3.1"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "nltk" },
     { name = "numpy" },
-    { name = "pillow" },
     { name = "scikit-learn" },
     { name = "scipy", version = "1.13.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "scipy", version = "1.15.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "sentencepiece" },
     { name = "torch" },
+    { name = "torchvision" },
     { name = "tqdm" },
     { name = "transformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/73/f8/d21374d41122a39782d45ef2ddace7a23ec2d1641334a7253d8b50088eec/sentence-transformers-2.3.1.tar.gz", hash = "sha256:d589d85a464f45338cdbdf99ea715f8068e1fb01c582e0bcdbf60bcf3eade6d0", size = 99169 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/06/97/57afa3d05801b6b9305f96a7ce5995e12c1d2ba25ce66747de107816b0b5/sentence_transformers-2.3.1-py3-none-any.whl", hash = "sha256:285d6637726c3b002186aa4b8bcace1101364b32671fb605297c4c2636b8190e", size = 132832 },
-]
+sdist = { url = "https://files.pythonhosted.org/packages/b0/ab/af4f67cee74044903f6e22f3977a51bb4e0ec71df4345593ac8c7b06a6c4/sentence-transformers-2.2.0.tar.gz", hash = "sha256:c7365228b6d24e4d73cf49d409421820887ca43c86d49f264b68cfa00d761f96", size = 79666 }
 
 [[package]]
 name = "sentencepiece"
@@ -1916,6 +1911,34 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/67/0a/b6dddafbb64d3ca13078a2616a2ea02c595da832586898a7eb414cf7ad10/torch-2.1.0-cp39-cp39-win_amd64.whl", hash = "sha256:2419cf49aaf3b2336c7aa7a54a1b949fa295b1ae36f77e2aecb3a74e3a947255", size = 192243526 },
     { url = "https://files.pythonhosted.org/packages/9c/1e/0da488a46027e2fb671feeed4944b9783905d6fd705069e4c69f03e6ab48/torch-2.1.0-cp39-none-macosx_10_9_x86_64.whl", hash = "sha256:6ad491e70dbe4288d17fdbfc7fbfa766d66cbe219bc4871c7a8096f4a37c98df", size = 146971449 },
     { url = "https://files.pythonhosted.org/packages/4c/53/f1e58e147df8601c963df4b15045631f7e3d3caa5973bdf4e54a5cf6834e/torch-2.1.0-cp39-none-macosx_11_0_arm64.whl", hash = "sha256:421739685eba5e0beba42cb649740b15d44b0d565c04e6ed667b41148734a75b", size = 59548185 },
+]
+
+[[package]]
+name = "torchvision"
+version = "0.16.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "requests" },
+    { name = "torch" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/89/0cdc6f497cbbb83dd51804cd4f788b7f5bd529f07b5417b50fe9c5655b76/torchvision-0.16.0-cp310-cp310-macosx_10_13_x86_64.whl", hash = "sha256:16c300fdbbe91469f5e9feef8d24c6acabd8849db502a06160dd76ba68e897a0", size = 1705727 },
+    { url = "https://files.pythonhosted.org/packages/de/5c/63da40bcac00e06eae06b52b4a82ba089b44d2cbd232020fe9194ea75ea9/torchvision-0.16.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:ef5dec6c48b715353781b83749efcdea03835720a71b377684453ee117aab3c7", size = 1617103 },
+    { url = "https://files.pythonhosted.org/packages/84/eb/4f6483ae9094e164dc5b9b792e377f7d37823b0bedc3eef3193d416d2bb6/torchvision-0.16.0-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:9e3a2012e463f498de21f6598cc7a266b9a8c6fe15788472fdc419233ea6f3f2", size = 6920219 },
+    { url = "https://files.pythonhosted.org/packages/82/29/824940e810a81c419a9d35d6c400bd8f99f322878bdd637ac769a597cf0f/torchvision-0.16.0-cp310-cp310-manylinux2014_aarch64.whl", hash = "sha256:e4327e082b703921ae52caeee4f7839f7e6c73cfc5eedea468ecb5c1487ecdbf", size = 14076642 },
+    { url = "https://files.pythonhosted.org/packages/59/af/426c2b90f5c4f8aba778746465af9e662680570e950e02379e91c6138285/torchvision-0.16.0-cp310-cp310-win_amd64.whl", hash = "sha256:62f01513687cce3480df8928fcc6c09b4aa0433d05ac75e82877acc773f6a568", size = 1263025 },
+    { url = "https://files.pythonhosted.org/packages/23/84/46481327771d4f63feb59dd0d9e1cd6a42e985dbd371965f486a5bf9f323/torchvision-0.16.0-cp311-cp311-macosx_10_13_x86_64.whl", hash = "sha256:31fdf289bdfb2976f65a14f79f6ddd1ee60113db34622674918e61521c2dc41f", size = 1705744 },
+    { url = "https://files.pythonhosted.org/packages/dd/48/85ef87f1548620d7c3743cbe135b90d8cf673fc7b8594361917558d765b6/torchvision-0.16.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:2294a6514a31a6fda562288b28cf6db57877237f4b56ff693262f237a7ed4035", size = 1617096 },
+    { url = "https://files.pythonhosted.org/packages/08/aa/033a0a1bca4a3b8f81f97709024e053da37cf5c970f3dc5d76233c920b99/torchvision-0.16.0-cp311-cp311-manylinux1_x86_64.whl", hash = "sha256:6a24a1e83e4bc7a31b39ef05d2ca4cd2182e95ff10f525edffe1473f7ce16ca1", size = 6920174 },
+    { url = "https://files.pythonhosted.org/packages/ab/1a/56e7df23d2ef1526094f7f895f00a2151a67ffa36dfb85d7c24246b25d81/torchvision-0.16.0-cp311-cp311-manylinux2014_aarch64.whl", hash = "sha256:9ed5f21e5a56e466667c6f9f6f93dba2a75e29921108bd70043eaf8e9ba0a7cc", size = 14076642 },
+    { url = "https://files.pythonhosted.org/packages/20/ac/ab6f42af83349e679b03c9bb18354740c6b58b17dba329fb408730230584/torchvision-0.16.0-cp311-cp311-win_amd64.whl", hash = "sha256:9ee3d4df7d4a84f883f8ad11fb6510549f40f68dd5469eae601d7e02fb4809b2", size = 1262967 },
+    { url = "https://files.pythonhosted.org/packages/12/46/2a12963c071ac4b85eea63b5b414d7fc62c971dde497279247f852fcc113/torchvision-0.16.0-cp39-cp39-macosx_10_13_x86_64.whl", hash = "sha256:de7c7302fa2f67a2a151e595a8e7dc3865a445d952e99d5c682ba78f312fedc3", size = 1705759 },
+    { url = "https://files.pythonhosted.org/packages/7d/fd/9c2b3d0200532dc4a6211ef0fcf78c0556a27e3b03800333d4caa32bedc5/torchvision-0.16.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:f044cffd252fd293b6df46f38d7eeb2fd4fe931e0114c5263735e3b8c9c60a4f", size = 1617063 },
+    { url = "https://files.pythonhosted.org/packages/8b/64/00e53316beb2f19edcaa0eb283b6087cb4d5275112f24b8ea0d8b49c1d5f/torchvision-0.16.0-cp39-cp39-manylinux1_x86_64.whl", hash = "sha256:8cb501061f6654da494dd975acc1fa301c4b8aacf96bdbcf1553f51a53ebfd1f", size = 6922566 },
+    { url = "https://files.pythonhosted.org/packages/37/5b/1a50f2fc60ae48d3a3212c5547c293da2e169ce023733ed4dad203f7fb79/torchvision-0.16.0-cp39-cp39-manylinux2014_aarch64.whl", hash = "sha256:5a47108ae6a8effdf09fe35fd0c4d5414e69ca8d2334e87339de497b7b64b0c9", size = 1711911 },
+    { url = "https://files.pythonhosted.org/packages/ec/36/1ecc19249def521b3b948baee32903148b1f399d2dd5a9a5692942e8383c/torchvision-0.16.0-cp39-cp39-win_amd64.whl", hash = "sha256:9b8f06e6a2f80576007b88846f74b680a1ad3b59d2e22b075587b430180e9cfa", size = 1263031 },
 ]
 
 [[package]]

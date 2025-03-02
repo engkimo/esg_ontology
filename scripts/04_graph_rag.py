@@ -20,6 +20,9 @@ from src.utils.device import get_device
 
 def visualize_subgraph(subgraph: dict, title: str):
     """サブグラフの可視化"""
+    # フォント設定
+    plt.rcParams['font.family'] = ['Hiragino Sans', 'Hiragino Kaku Gothic Pro', 'Yu Gothic', 'MS Gothic', 'IPAGothic']
+    
     G = nx.DiGraph()
     
     # ノードの追加
@@ -30,9 +33,13 @@ def visualize_subgraph(subgraph: dict, title: str):
     for rel in subgraph["relationships"]:
         G.add_edge(rel["source"], rel["target"], type=rel["type"])
     
+    if len(G.nodes) == 0:
+        print(f"警告: {title}のサブグラフにノードが存在しません。")
+        return
+    
     # 描画
     plt.figure(figsize=(15, 10))
-    pos = nx.spring_layout(G, k=1, iterations=50)
+    pos = nx.spring_layout(G, k=2, iterations=50)  # kパラメータを調整
     
     # カテゴリ別の色分け
     colors = {
@@ -45,24 +52,31 @@ def visualize_subgraph(subgraph: dict, title: str):
     # ノードの描画
     for category in colors:
         nodes = [n for n, attr in G.nodes(data=True) if attr.get("category") == category]
-        nx.draw_networkx_nodes(G, pos, nodelist=nodes, node_color=colors[category],
-                             node_size=2000, alpha=0.7)
+        if nodes:  # ノードが存在する場合のみ描画
+            nx.draw_networkx_nodes(G, pos, nodelist=nodes, node_color=colors[category],
+                                 node_size=3000, alpha=0.7)  # ノードサイズを大きく
     
     # エッジとラベルの描画
-    nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=True, arrowsize=20)
-    nx.draw_networkx_labels(G, pos, font_size=10)
+    nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=True, arrowsize=20,
+                          width=2.0)  # エッジを太く
     
+    # ノードラベルの描画（日本語対応）
+    labels = {node: node for node in G.nodes()}
+    nx.draw_networkx_labels(G, pos, labels, font_family='Hiragino Sans', font_size=12)
+    
+    # エッジラベルの描画（日本語対応）
     edge_labels = nx.get_edge_attributes(G, "type")
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_family='Hiragino Sans', font_size=10)
     
-    plt.title(title, fontsize=15, pad=20)
+    plt.title(f"Query: {title}", fontsize=15, fontfamily='Hiragino Sans')
     plt.axis("off")
     plt.tight_layout()
     
     # 画像として保存
     output_dir = project_root / "data" / "visualizations"
     output_dir.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_dir / f"{title.replace(' ', '_').lower()}.png")
+    plt.savefig(output_dir / f"{title.replace(' ', '_').lower()}.png",
+                bbox_inches='tight', dpi=300)
     plt.close()
 
 def evaluate_response(question: str, answer: str, subgraph: dict) -> dict:
@@ -114,7 +128,8 @@ def main():
         device=device,
         neo4j_uri=neo4j_uri,
         neo4j_user=neo4j_user,
-        neo4j_password=neo4j_password
+        neo4j_password=neo4j_password,
+        use_mps=True  # MPSデバイスを使用
     )
 
     # ノード埋め込みの更新
@@ -147,8 +162,7 @@ def main():
         # 回答の生成
         answer = rag.generate_response(
             query=question,
-            subgraph=subgraph,
-            temperature=0.3  # より確実な回答を生成
+            subgraph=subgraph
         )
         
         print(f"\n回答:\n{answer}")

@@ -7,7 +7,11 @@ from pathlib import Path
 import numpy as np
 import re
 from collections import Counter
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoModel
+import torch.nn.functional as F
 from ..knowledge_graph.neo4j_manager import Neo4jManager
+from ..utils.device import get_device, move_to_device
 
 class ESGGraphRAG:
     """ESGドメインのGraphRAGシステム"""
@@ -16,7 +20,11 @@ class ESGGraphRAG:
         self,
         neo4j_uri: Optional[str] = None,
         neo4j_user: Optional[str] = None,
-        neo4j_password: Optional[str] = None
+        neo4j_password: Optional[str] = None,
+        llm_model_name: str = "rinna/japanese-gpt-neox-small",
+        embedding_model_name: str = "sonoisa/sentence-bert-base-ja-mean-tokens",
+        device: Optional[torch.device] = None,
+        use_mps: bool = False
     ):
         """
         初期化
@@ -25,20 +33,72 @@ class ESGGraphRAG:
             neo4j_uri: Neo4jのURI
             neo4j_user: Neo4jのユーザー名
             neo4j_password: Neo4jのパスワード
+            llm_model_name: 使用するLLMモデル名
+            embedding_model_name: 使用するエンベッディングモデル名
+            device: 使用するデバイス
+            use_mps: MPSデバイスを使用するかどうか
         """
+        self.device = device if device is not None else get_device()
+        self.use_mps = use_mps
+        
         # Neo4jマネージャーの初期化
         self.neo4j = Neo4jManager(
             uri=neo4j_uri,
             user=neo4j_user,
             password=neo4j_password
         )
+        
+        # LLMの初期化
+        self.tokenizer = AutoTokenizer.from_pretrained(llm_model_name)
+        self.llm = AutoModelForCausalLM.from_pretrained(llm_model_name)
+        if self.use_mps:
+            self.llm = self.llm.to('mps')
+        else:
+            self.llm = move_to_device(self.llm, self.device)
+        
+        # エンベッディングモデルの初期化（sentence-transformersの代わりにtransformersを直接使用）
+        self.embedding_tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
+        self.embedding_model = AutoModel.from_pretrained(embedding_model_name)
+        if self.use_mps:
+            self.embedding_model = self.embedding_model.to('mps')
+        else:
+            self.embedding_model = move_to_device(self.embedding_model, self.device)
+        
+        # ノード埋め込みの保存用
+        self.node_embeddings = {}
+    
+    def _get_embeddings(self, texts: List[str]) -> torch.Tensor:
+        """テキストの埋め込みを取得"""
+        # バッチ処理のための準備
+        encoded = self.embedding_tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors="pt"
+        )
+        
+        if self.use_mps:
+            encoded = {k: v.to('mps') for k, v in encoded.items()}
+        else:
+            encoded = {k: v.to(self.device) for k, v in encoded.items()}
+        
+        # モデルの出力を取得
+        with torch.no_grad():
+            outputs = self.embedding_model(**encoded)
+            # [CLS]トークンの出力を使用
+            embeddings = outputs.last_hidden_state[:, 0, :]
+            # L2正規化
+            embeddings = F.normalize(embeddings, p=2, dim=1)
+        
+        return embeddings
     
     def search_relevant_subgraph(
         self,
         query: str,
         max_nodes: int = 10,
         max_depth: int = 2,
-        similarity_threshold: float = 0.5,
+        similarity_threshold: float = 0.3,
         category_weights: Optional[Dict[str, float]] = None
     ) -> Dict:
         """
@@ -54,109 +114,133 @@ class ESGGraphRAG:
         Returns:
             関連するサブグラフ情報
         """
+        # クエリの埋め込みを計算
+        query_embedding = self._get_embeddings([query])[0]
+        
         # デフォルトのカテゴリ重み
         if category_weights is None:
             category_weights = {
                 "Environment": 1.0,
                 "Social": 1.0,
-                "Governance": 1.0
+                "Governance": 1.0,
+                "Other": 0.8
             }
-        
-        # クエリの単語を抽出
-        query_words = set(self._tokenize(query))
         
         # Neo4jでの検索クエリ
         cypher_query = """
-        // ステップ1: クエリに関連するノードの検索
         MATCH (n:Concept)
-        WHERE any(word IN $query_words WHERE n.name CONTAINS word)
-        WITH n, n.category AS category
+        RETURN n.name AS name, n.category AS category, n.description AS description
+        """
         
-        // ステップ2: カテゴリによる重み付け
-        WITH n, CASE category
-            WHEN 'Environment' THEN $env_weight
-            WHEN 'Social' THEN $social_weight
-            WHEN 'Governance' THEN $gov_weight
-            ELSE 1.0
-        END AS weight
-        ORDER BY weight DESC
-        LIMIT $max_initial_nodes
-        
-        // ステップ3: 関連するパスの探索
-        MATCH path = (n)-[r:ESG_RELATION*1..%d]->(m)
-        WHERE ALL(rel IN r WHERE rel.confidence IS NULL OR rel.confidence >= 0.5)
-        WITH COLLECT(path) AS paths
-        
-        // ステップ4: パスの展開とユニークなノードと関係の抽出
-        UNWIND paths AS p
-        WITH DISTINCT nodes(p) AS nodes, relationships(p) AS rels
-        
-        // ステップ5: 結果の整形
-        RETURN 
-            [n IN nodes | {
-                id: id(n),
-                name: n.name,
-                category: n.category,
-                properties: properties(n)
-            }] AS nodes,
-            [r IN rels | {
-                source: startNode(r).name,
-                type: r.type,
-                target: endNode(r).name,
-                properties: properties(r)
-            }] AS relationships
-        LIMIT %d
-        """ % (max_depth, max_nodes)
-        
-        # パラメータの準備
-        params = {
-            "query_words": list(query_words),
-            "max_initial_nodes": max_nodes,
-            "env_weight": category_weights.get("Environment", 1.0),
-            "social_weight": category_weights.get("Social", 1.0),
-            "gov_weight": category_weights.get("Governance", 1.0)
-        }
-        
-        # クエリの実行
         with self.neo4j.driver.session() as session:
-            result = session.run(cypher_query, params)
-            subgraph = result.single()
+            result = session.run(cypher_query)
+            nodes = [(record["name"], record["category"], record.get("description", "")) for record in result]
+        
+        # ノードの類似度を計算
+        similarities = []
+        for name, category, description in nodes:
+            if name not in self.node_embeddings:
+                # 埋め込みがない場合は計算
+                text = f"{name} ({category}). {description}"
+                embedding = self._get_embeddings([text])[0]
+                self.node_embeddings[name] = embedding
+            else:
+                embedding = self.node_embeddings[name]
             
-            if not subgraph:
-                return {"nodes": [], "relationships": []}
+            # コサイン類似度を計算
+            similarity = torch.nn.functional.cosine_similarity(
+                query_embedding.unsqueeze(0),
+                embedding.unsqueeze(0)
+            ).item()
+            
+            # カテゴリの重みを適用
+            weight = category_weights.get(category, 1.0)
+            weighted_similarity = similarity * weight
+            
+            similarities.append((name, weighted_similarity))
         
-        # 結果の後処理
-        processed_result = self._process_subgraph_result(subgraph)
+        # 類似度でソート
+        similarities.sort(key=lambda x: x[1], reverse=True)
         
-        return processed_result
-    
-    def _process_subgraph_result(self, subgraph: Dict) -> Dict:
-        """サブグラフの結果を後処理"""
-        # ノードの重複除去とソート
-        unique_nodes = {}
-        for node in subgraph["nodes"]:
-            if node["name"] not in unique_nodes:
-                unique_nodes[node["name"]] = node
+        # 閾値以上の類似度を持つノードを選択
+        relevant_nodes = [
+            name for name, sim in similarities
+            if sim >= similarity_threshold
+        ][:max_nodes]
         
-        # 関係の重複除去とソート
-        unique_relations = {}
-        for rel in subgraph["relationships"]:
-            key = f"{rel['source']}-{rel['type']}-{rel['target']}"
-            if key not in unique_relations:
-                unique_relations[key] = rel
+        if not relevant_nodes:
+            return {"nodes": [], "relationships": [], "statistics": {
+                "total_nodes": 0,
+                "total_relationships": 0,
+                "category_distribution": {}
+            }}
         
-        # カテゴリごとのノード数を計算
+        # 関連ノード間のパスを取得
+        paths_query = """
+        MATCH path = (n:Concept)-[r:ESG_RELATION*1..%d]->(m:Concept)
+        WHERE n.name IN $relevant_nodes AND m.name IN $relevant_nodes
+        RETURN path
+        """ % max_depth
+        
+        with self.neo4j.driver.session() as session:
+            result = session.run(paths_query, relevant_nodes=relevant_nodes)
+            paths = list(result)
+        
+        # サブグラフの構築
+        nodes_set = set()
+        relationships_set = set()
+        
+        for path in paths:
+            path_nodes = path["path"].nodes
+            path_relationships = path["path"].relationships
+            
+            for node in path_nodes:
+                nodes_set.add((
+                    node["name"],
+                    node.get("category", "Other"),
+                    node.get("description", "")
+                ))
+            
+            for rel in path_relationships:
+                relationships_set.add((
+                    rel.start_node["name"],
+                    rel.type,
+                    rel.end_node["name"],
+                    rel.get("confidence", 1.0)
+                ))
+        
+        # 結果の整形
+        nodes = [
+            {
+                "name": name,
+                "category": category,
+                "description": description
+            }
+            for name, category, description in nodes_set
+        ]
+        
+        relationships = [
+            {
+                "source": source,
+                "type": rel_type,
+                "target": target,
+                "confidence": confidence
+            }
+            for source, rel_type, target, confidence in relationships_set
+        ]
+        
+        # カテゴリ分布の計算
         category_counts = {}
-        for node in unique_nodes.values():
-            category = node.get("category", "Other")
+        for node in nodes:
+            category = node["category"]
             category_counts[category] = category_counts.get(category, 0) + 1
         
         return {
-            "nodes": list(unique_nodes.values()),
-            "relationships": list(unique_relations.values()),
+            "nodes": nodes,
+            "relationships": relationships,
             "statistics": {
-                "total_nodes": len(unique_nodes),
-                "total_relationships": len(unique_relations),
+                "total_nodes": len(nodes),
+                "total_relationships": len(relationships),
                 "category_distribution": category_counts
             }
         }
@@ -227,4 +311,34 @@ class ESGGraphRAG:
     
     def close(self):
         """リソースの解放"""
-        self.neo4j.close() 
+        self.neo4j.close()
+    
+    def update_node_embeddings(self, batch_size: int = 32):
+        """
+        全ノードの埋め込みを更新
+        
+        Args:
+            batch_size: バッチサイズ
+        """
+        # Neo4jから全ノードを取得
+        cypher_query = """
+        MATCH (n:Concept)
+        RETURN n.name AS name, n.category AS category
+        """
+        
+        with self.neo4j.driver.session() as session:
+            result = session.run(cypher_query)
+            nodes = [(record["name"], record["category"]) for record in result]
+        
+        # バッチ処理でノード埋め込みを計算
+        for i in range(0, len(nodes), batch_size):
+            batch = nodes[i:i + batch_size]
+            texts = [f"{name} ({category})" for name, category in batch]
+            
+            embeddings = self._get_embeddings(texts)
+            
+            # 埋め込みを保存
+            for j, (name, _) in enumerate(batch):
+                self.node_embeddings[name] = embeddings[j]
+        
+        print(f"ノード埋め込みを更新しました（{len(self.node_embeddings)}ノード）") 

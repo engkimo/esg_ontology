@@ -8,6 +8,7 @@ from pathlib import Path
 import torch
 from dotenv import load_dotenv
 import os
+import networkx as nx
 
 # プロジェクトルートをパスに追加
 project_root = Path(__file__).parent.parent
@@ -56,24 +57,31 @@ def main():
     ], device=device)
     num_nodes = 4
 
+    # サンプルグラフの作成
+    G = nx.DiGraph()
+    for i in range(num_nodes):
+        G.add_node(str(i))
+    for i in range(edge_index.size(1)):
+        G.add_edge(str(edge_index[0,i].item()), str(edge_index[1,i].item()))
+
     # GNNの学習
-    completion_model.train_gnn(
-        edge_index=edge_index,
-        num_nodes=num_nodes,
-        epochs=100,
+    completion_model.train(
+        graph=G,
+        num_epochs=100,
         batch_size=32
     )
 
     # リンク予測
     print("\nリンク予測を実行中...")
-    prob, pairs = completion_model.predict_links_with_gnn(
-        edge_index=edge_index,
-        num_nodes=num_nodes
+    predictions = completion_model.predict_links(
+        graph=G,
+        source_node="0",
+        top_k=5
     )
 
     print("\n予測された新しいリンク（上位5件）:")
-    for i in range(min(5, len(prob))):
-        print(f"Node {pairs[0,i]} -> Node {pairs[1,i]}: {prob[i]:.4f}")
+    for target, prob in predictions:
+        print(f"Node 0 -> Node {target}: {prob:.4f}")
 
     # LLMによる関係推論
     print("\nLLMによる関係推論を実行中...")
